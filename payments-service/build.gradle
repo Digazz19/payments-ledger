@@ -1,9 +1,35 @@
+configurations {
+    jooqGenerator
+}
+
+sourceSets {
+    main {
+        java {
+            srcDir 'src/main/generated'
+        }
+    }
+}
+
 dependencies {
     implementation 'org.flywaydb:flyway-core:13.8.0'
     implementation 'org.flywaydb:flyway-database-postgresql:13.8.0'
+    implementation 'org.jooq:jooq:3.20.5'
+    implementation 'com.zaxxer:HikariCP:6.2.1'
     runtimeOnly 'org.postgresql:postgresql:42.7.4'
+
+    jooqGenerator 'org.jooq:jooq-codegen:3.20.5'
+    jooqGenerator 'org.postgresql:postgresql:42.7.4'
 
     testImplementation 'org.testcontainers:testcontainers-postgresql:2.0.2'
     testImplementation 'org.apache.groovy:groovy-sql:4.0.24'
     testRuntimeOnly 'org.postgresql:postgresql:42.7.4'
+}
+
+tasks.register('generateJooq', JavaExec) {
+    group = 'build'
+    description = 'Generates jOOQ classes from the local PostgreSQL schema'
+    classpath = configurations.jooqGenerator
+    mainClass = 'org.jooq.codegen.GenerationTool'
+    workingDir = projectDir
+    args = ['jooq-codegen.xml']
 }
