@@ -1,14 +1,23 @@
 package ledger.domain;
 
-import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class InMemoryLedger {
 
     private static final UUID SYSTEM_ACCOUNT = new UUID(0, 1);
 
-    private final List<LedgerEntry> entries = new ArrayList<>();
+    private final Collection<LedgerEntry> entries = new ConcurrentLinkedQueue<>();
+    private final Map<UUID, ReentrantLock> locks = new ConcurrentHashMap<>();
+
+    private ReentrantLock lockFor(UUID accountId) {
+        return locks.computeIfAbsent(accountId, id -> new ReentrantLock());
+    }
 
     public UUID createAccount() {
         return UUID.randomUUID();
@@ -19,21 +28,40 @@ public class InMemoryLedger {
             throw new IllegalArgumentException("AmountMinor must be positive");
         }
 
-        entries.add(new LedgerEntry(SYSTEM_ACCOUNT, Direction.DEBIT, amountMinor));
-        entries.add(new LedgerEntry(accountId, Direction.CREDIT, amountMinor));
+        ReentrantLock lock = lockFor(accountId);
+        lock.lock();
+        try {
+            entries.add(new LedgerEntry(SYSTEM_ACCOUNT, Direction.DEBIT, amountMinor));
+            entries.add(new LedgerEntry(accountId, Direction.CREDIT, amountMinor));
+        } finally {
+            lock.unlock();
+        }
     }
 
     public void transfer(UUID source, UUID target, long amountMinor) {
         if (amountMinor <= 0) {
-            throw new IllegalArgumentException("amountMinor must be positive");
+            throw new IllegalArgumentException("AmountMinor must be positive");
         }
 
-        if (balance(source) < amountMinor) {
-            throw new InsufficientFundsException();
-        }
+        UUID first = source.compareTo(target) < 0 ? source : target;
+        UUID second = first.equals(source) ? target : source;
 
-        entries.add(new LedgerEntry(source, Direction.DEBIT, amountMinor));
-        entries.add(new LedgerEntry(target, Direction.CREDIT, amountMinor));
+        ReentrantLock firstLock = lockFor(first);
+        ReentrantLock secondLock = lockFor(second);
+
+        firstLock.lock();
+        secondLock.lock();
+        try {
+            if (balance(source) < amountMinor) {
+                throw new InsufficientFundsException();
+            }
+
+            entries.add(new LedgerEntry(source, Direction.DEBIT, amountMinor));
+            entries.add(new LedgerEntry(target, Direction.CREDIT, amountMinor));
+        } finally {
+            secondLock.unlock();
+            firstLock.unlock();
+        }
     }
 
     public long balance(UUID accountId) {
