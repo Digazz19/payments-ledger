@@ -25,4 +25,16 @@ abstract class ApiSpec extends PostgresSpec {
         app?.stop()
         database?.close()
     }
+
+    String newAccount(Map args = [:]) {
+        def id = client.post("/accounts", [ownerName: "Teste", currency: "EUR", country: "PT"]).json.id
+        if (args.balance) {
+            client.post("/deposits", [accountId: id, amountMinor: args.balance])
+        }
+        id
+    }
+
+    long balance(String id) {
+        client.get("/accounts/$id").json.balanceMinor
+    }
 }

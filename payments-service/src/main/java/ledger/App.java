@@ -7,8 +7,11 @@ import java.util.UUID;
 import ledger.db.Database;
 import ledger.http.ApiException;
 import ledger.repository.AccountRepository;
+import ledger.repository.TransferRepository;
 import ledger.service.AccountService;
 import ledger.service.CreateAccountRequest;
+import ledger.service.DepositRequest;
+import ledger.service.DepositService;
 import spark.Response;
 import spark.Service;
 
@@ -23,6 +26,7 @@ public final class App {
     public static App start(Database database, int port) {
         ObjectMapper mapper = new ObjectMapper();
         AccountService accounts = new AccountService(new AccountRepository(database.dsl()));
+        DepositService deposits = new DepositService(accounts, new TransferRepository(database.dsl()));
         Service service = Service.ignite().port(port);
 
         service.before((request, response) -> response.type("application/json"));
@@ -38,6 +42,12 @@ public final class App {
         service.get("/accounts/:id", (request, response) -> {
             UUID id = UUID.fromString(request.params("id"));
             return mapper.writeValueAsString(accounts.get(id));
+        });
+
+        service.post("/deposits", (request, response) -> {
+            DepositRequest body = mapper.readValue(request.body(), DepositRequest.class);
+            response.status(201);
+            return mapper.writeValueAsString(deposits.deposit(body));
         });
 
         service.exception(ApiException.class, (error, request, response) ->
