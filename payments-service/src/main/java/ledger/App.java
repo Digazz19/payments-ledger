@@ -2,6 +2,10 @@ package ledger;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+
 import java.util.Map;
 import java.util.UUID;
 import ledger.db.Database;
@@ -10,12 +14,14 @@ import ledger.http.ApiException;
 import ledger.http.HttpMapping;
 import ledger.repository.AccountRepository;
 import ledger.repository.TransferRepository;
+import ledger.repository.LedgerEntryRepository;
 import ledger.service.AccountService;
 import ledger.service.CreateAccountRequest;
 import ledger.service.DepositRequest;
 import ledger.service.DepositService;
 import ledger.service.TransferRequest;
 import ledger.service.TransferService;
+import ledger.service.StatementService;
 import spark.Response;
 import spark.Service;
 
@@ -28,11 +34,14 @@ public final class App {
     }
 
     public static App start(Database database, int port) {
-        ObjectMapper mapper = new ObjectMapper();
+        ObjectMapper mapper = new ObjectMapper()
+            .registerModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         TransferRepository transferRepository = new TransferRepository(database.dsl());
         AccountService accounts = new AccountService(new AccountRepository(database.dsl()));
         DepositService deposits = new DepositService(accounts, transferRepository);
         TransferService transfers = new TransferService(accounts, transferRepository);
+        StatementService statements = new StatementService(accounts, new LedgerEntryRepository(database.dsl()));
         Service service = Service.ignite().port(port);
 
         service.before((request, response) -> response.type("application/json"));
@@ -48,6 +57,12 @@ public final class App {
         service.get("/accounts/:id", (request, response) -> {
             UUID id = UUID.fromString(request.params("id"));
             return mapper.writeValueAsString(accounts.get(id));
+        });
+
+        service.get("/accounts/:id/entries", (request, response) -> {
+            UUID id = UUID.fromString(request.params("id"));
+            return mapper.writeValueAsString(
+                statements.entries(id, request.queryParams("limit"), request.queryParams("cursor")));
         });
 
         service.post("/deposits", (request, response) -> {
