@@ -29,6 +29,8 @@ dependencies {
     runtimeOnly 'org.slf4j:slf4j-simple:2.0.16'
 
     testImplementation 'org.apache.groovy:groovy-json:4.0.24'
+    
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.18.2'
 }
 
 tasks.register('generateJooq', JavaExec) {
