@@ -5,13 +5,17 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;
 import java.util.UUID;
 import ledger.db.Database;
+import ledger.domain.Transfer;
 import ledger.http.ApiException;
+import ledger.http.HttpMapping;
 import ledger.repository.AccountRepository;
 import ledger.repository.TransferRepository;
 import ledger.service.AccountService;
 import ledger.service.CreateAccountRequest;
 import ledger.service.DepositRequest;
 import ledger.service.DepositService;
+import ledger.service.TransferRequest;
+import ledger.service.TransferService;
 import spark.Response;
 import spark.Service;
 
@@ -25,8 +29,10 @@ public final class App {
 
     public static App start(Database database, int port) {
         ObjectMapper mapper = new ObjectMapper();
+        TransferRepository transferRepository = new TransferRepository(database.dsl());
         AccountService accounts = new AccountService(new AccountRepository(database.dsl()));
-        DepositService deposits = new DepositService(accounts, new TransferRepository(database.dsl()));
+        DepositService deposits = new DepositService(accounts, transferRepository);
+        TransferService transfers = new TransferService(accounts, transferRepository);
         Service service = Service.ignite().port(port);
 
         service.before((request, response) -> response.type("application/json"));
@@ -50,6 +56,18 @@ public final class App {
             return mapper.writeValueAsString(deposits.deposit(body));
         });
 
+        service.post("/transfers", (request, response) -> {
+            TransferRequest body = mapper.readValue(request.body(), TransferRequest.class);
+            Transfer transfer = transfers.transfer(body);
+            response.status(HttpMapping.statusFor(transfer.outcome()));
+            return mapper.writeValueAsString(transfer);
+        });
+
+        service.get("/transfers/:id", (request, response) -> {
+            UUID id = UUID.fromString(request.params("id"));
+            return mapper.writeValueAsString(transfers.get(id));
+        });
+
         service.exception(ApiException.class, (error, request, response) ->
             writeError(mapper, response, error.status(), error.code(), error.getMessage()));
 
@@ -58,6 +76,12 @@ public final class App {
 
         service.exception(IllegalArgumentException.class, (error, request, response) ->
             writeError(mapper, response, 400, "VALIDATION_ERROR", error.getMessage()));
+
+        service.exception(IllegalArgumentException.class, (error, request, response) ->
+            writeError(mapper, response, 400, "VALIDATION_ERROR", error.getMessage()));
+
+        service.exception(Exception.class, (error, request, response) ->
+            writeError(mapper, response, 500, "INTERNAL_ERROR", "Unexpected error"));
 
         service.init();
         service.awaitInitialization();

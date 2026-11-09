@@ -8,6 +8,8 @@ import ledger.domain.Transfer;
 import ledger.domain.TransferStatus;
 import org.jooq.DSLContext;
 import org.jooq.impl.DSL;
+import java.util.Optional;
+import java.util.UUID;
 
 public class TransferRepository {
 
@@ -57,5 +59,18 @@ public class TransferRepository {
             .set(ACCOUNT_BALANCES.BALANCE_MINOR, ACCOUNT_BALANCES.BALANCE_MINOR.plus(transfer.amountMinor()))
             .where(ACCOUNT_BALANCES.ACCOUNT_ID.eq(transfer.targetAccountId()))
             .execute();
+    }
+
+    public Optional<Transfer> findById(UUID id) {
+        return dsl.selectFrom(TRANSFERS)
+            .where(TRANSFERS.ID.eq(id))
+            .fetchOptional(row -> new Transfer(
+                row.getId(),
+                row.getSourceAccountId(),
+                row.getTargetAccountId(),
+                row.getAmountMinor(),
+                row.getCurrency(),
+                TransferStatus.valueOf(row.getStatus()),
+                row.getReason()));
     }
 }

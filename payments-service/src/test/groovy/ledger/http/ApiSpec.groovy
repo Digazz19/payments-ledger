@@ -37,4 +37,27 @@ abstract class ApiSpec extends PostgresSpec {
     long balance(String id) {
         client.get("/accounts/$id").json.balanceMinor
     }
+
+    Map transfer(String source, String target, long amount) {
+        [sourceAccountId: source, targetAccountId: target, amountMinor: amount, currency: "EUR"]
+    }
+
+    void failLedgerWrites() {
+        sql.execute('''
+            CREATE OR REPLACE FUNCTION fail_ledger_write() RETURNS trigger AS $$
+            BEGIN
+                RAISE EXCEPTION 'ledger writes disabled for test';
+            END;
+            $$ LANGUAGE plpgsql
+        ''')
+        sql.execute('''
+            CREATE TRIGGER fail_ledger_write
+            BEFORE INSERT ON ledger_entries
+            FOR EACH ROW EXECUTE FUNCTION fail_ledger_write()
+        ''')
+    }
+
+    void restoreLedgerWrites() {
+        sql.execute('DROP TRIGGER IF EXISTS fail_ledger_write ON ledger_entries')
+    }
 }

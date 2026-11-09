@@ -11,4 +11,12 @@ public record Transfer(
     TransferStatus status,
     String reason
 ) {
+
+    public TransferOutcome outcome() {
+        return switch (status) {
+            case COMPLETED -> new TransferOutcome.Completed();
+            case REJECTED -> new TransferOutcome.Rejected(reason);
+            case IN_REVIEW -> new TransferOutcome.InReview(reason);
+        };
+    }
 }
