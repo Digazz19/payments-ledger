@@ -20,23 +20,16 @@ public class TransferService {
     public Transfer transfer(TransferRequest request) {
         validate(request);
 
-        Account source = accounts.get(request.sourceAccountId());
+        accounts.get(request.sourceAccountId());
         accounts.get(request.targetAccountId());
 
-        boolean hasFunds = source.balanceMinor() >= request.amountMinor();
-
-        Transfer transfer = new Transfer(
+        return repository.transfer(
             UUID.randomUUID(),
             request.sourceAccountId(),
             request.targetAccountId(),
             request.amountMinor(),
-            request.currency(),
-            hasFunds ? TransferStatus.COMPLETED : TransferStatus.REJECTED,
-            hasFunds ? null : "INSUFFICIENT_FUNDS"
+            request.currency()
         );
-
-        repository.save(transfer);
-        return transfer;
     }
 
     public Transfer get(UUID id) {

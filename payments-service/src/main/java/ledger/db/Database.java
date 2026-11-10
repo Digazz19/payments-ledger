@@ -16,6 +16,7 @@ public final class Database implements AutoCloseable {
         config.setJdbcUrl(url);
         config.setUsername(user);
         config.setPassword(password);
+        config.setMaximumPoolSize(10);
 
         this.dataSource = new HikariDataSource(config);
         this.dsl = DSL.using(dataSource, SQLDialect.POSTGRES);

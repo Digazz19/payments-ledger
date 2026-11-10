@@ -65,7 +65,7 @@ abstract class ApiSpec extends PostgresSpec {
     }
 
     List<TestClient.Response> concurrently(int n, Closure<TestClient.Response> action) {
-        def pool = Executors.newVirtualThreadPerTaskExecutor()
+        def pool = Executors.newFixedThreadPool(Math.min(n, 50))
         def start = new CountDownLatch(1)
         try {
             def futures = (0..<n).collect { i ->
