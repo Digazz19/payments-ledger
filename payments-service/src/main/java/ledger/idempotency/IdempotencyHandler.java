@@ -3,25 +3,35 @@ package ledger.idempotency;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Duration;
 import java.util.HexFormat;
 import java.util.Map;
+import java.util.UUID;
 import ledger.http.ApiException;
+import org.jooq.DSLContext;
 import spark.Request;
 import spark.Response;
 
 public class IdempotencyHandler {
 
     @FunctionalInterface
+    public interface Completion {
+        void complete(DSLContext tx, StoredResponse response);
+    }
+
+    @FunctionalInterface
     public interface Action {
-        StoredResponse run(String key) throws Exception;
+        StoredResponse run(Completion completion) throws Exception;
     }
 
     private final IdempotencyRepository repository;
     private final ObjectMapper mapper;
+    private final Duration staleAfter;
 
-    public IdempotencyHandler(IdempotencyRepository repository, ObjectMapper mapper) {
+    public IdempotencyHandler(IdempotencyRepository repository, ObjectMapper mapper, Duration staleAfter) {
         this.repository = repository;
         this.mapper = mapper;
+        this.staleAfter = staleAfter;
     }
 
     public String handle(Request request, Response response, Action action) throws Exception {
@@ -31,18 +41,23 @@ public class IdempotencyHandler {
         }
 
         String hash = sha256(request.requestMethod() + " " + request.pathInfo() + "\n" + request.body());
+        UUID token = UUID.randomUUID();
 
-        if (!repository.tryReserve(key, hash)) {
+        boolean owned = repository.tryReserve(key, hash, token)
+            || repository.tryTakeOver(key, hash, token, staleAfter);
+
+        if (!owned) {
             return replay(key, hash, response);
         }
 
         try {
-            return send(response, action.run(key));
+            Completion completion = (tx, stored) -> repository.complete(tx, key, token, stored);
+            return send(response, action.run(completion));
         } catch (ApiException error) {
-            repository.complete(key, errorResponse(error));
+            repository.complete(repository.dsl(), key, token, errorResponse(error));
             throw error;
         } catch (Exception error) {
-            repository.release(key);
+            repository.release(key, token);
             throw error;
         }
     }
@@ -50,20 +65,13 @@ public class IdempotencyHandler {
     private String replay(String key, String hash, Response response) {
         IdempotencyRecord existing = repository.find(key);
 
+        if (existing != null && !existing.requestHash().equals(hash)) {
+            throw new ApiException(422, "IDEMPOTENCY_KEY_REUSED", "Key was used with a different request");
+        }
         if (existing == null || "IN_PROGRESS".equals(existing.state())) {
-            if (existing != null && !existing.requestHash().equals(hash)) {
-                throw keyReused();
-            }
             throw new ApiException(409, "IDEMPOTENCY_IN_PROGRESS", "A request with this key is in progress");
         }
-        if (!existing.requestHash().equals(hash)) {
-            throw keyReused();
-        }
         return send(response, new StoredResponse(existing.responseStatus(), existing.responseBody()));
-    }
-
-    private ApiException keyReused() {
-        return new ApiException(422, "IDEMPOTENCY_KEY_REUSED", "Key was used with a different request");
     }
 
     private StoredResponse errorResponse(ApiException error) throws Exception {

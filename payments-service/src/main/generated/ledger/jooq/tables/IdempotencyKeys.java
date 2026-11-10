@@ -8,6 +8,7 @@ import java.time.OffsetDateTime;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 
 import ledger.jooq.Keys;
 import ledger.jooq.Public;
@@ -88,6 +89,11 @@ public class IdempotencyKeys extends TableImpl<IdempotencyKeysRecord> {
      * The column <code>public.idempotency_keys.created_at</code>.
      */
     public final TableField<IdempotencyKeysRecord, OffsetDateTime> CREATED_AT = createField(DSL.name("created_at"), SQLDataType.TIMESTAMPWITHTIMEZONE(6).nullable(false).defaultValue(DSL.field(DSL.raw("now()"), SQLDataType.TIMESTAMPWITHTIMEZONE)), this, "");
+
+    /**
+     * The column <code>public.idempotency_keys.lock_token</code>.
+     */
+    public final TableField<IdempotencyKeysRecord, UUID> LOCK_TOKEN = createField(DSL.name("lock_token"), SQLDataType.UUID, this, "");
 
     private IdempotencyKeys(Name alias, Table<IdempotencyKeysRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);

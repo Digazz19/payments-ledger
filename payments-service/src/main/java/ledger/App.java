@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 import ledger.db.Database;
@@ -46,7 +47,8 @@ public final class App {
         TransferService transfers = new TransferService(accounts, transferRepository);
         StatementService statements = new StatementService(accounts, new LedgerEntryRepository(database.dsl()));
         IdempotencyRepository idempotencyRepository = new IdempotencyRepository(database.dsl());
-        IdempotencyHandler idempotency = new IdempotencyHandler(idempotencyRepository, mapper);
+        IdempotencyHandler idempotency = new IdempotencyHandler(
+            new IdempotencyRepository(database.dsl()), mapper, Duration.ofSeconds(60));
         Service service = Service.ignite().port(port);
 
         service.before((request, response) -> response.type("application/json"));
@@ -70,17 +72,17 @@ public final class App {
                 statements.entries(id, request.queryParams("limit"), request.queryParams("cursor")));
         });
 
-        service.post("/deposits", (request, response) -> idempotency.handle(request, response, key -> {
+        service.post("/deposits", (request, response) -> idempotency.handle(request, response, completion -> {
             DepositRequest body = mapper.readValue(request.body(), DepositRequest.class);
             Transfer transfer = deposits.deposit(body, (tx, saved) ->
-                idempotencyRepository.complete(tx, key, stored(mapper, 201, saved)));
+                completion.complete(tx, stored(mapper, 201, saved)));
             return stored(mapper, 201, transfer);
         }));
 
-        service.post("/transfers", (request, response) -> idempotency.handle(request, response, key -> {
+        service.post("/transfers", (request, response) -> idempotency.handle(request, response, completion -> {
             TransferRequest body = mapper.readValue(request.body(), TransferRequest.class);
             Transfer transfer = transfers.transfer(body, (tx, saved) ->
-                idempotencyRepository.complete(tx, key, stored(mapper, HttpMapping.statusFor(saved.outcome()), saved)));
+                completion.complete(tx, stored(mapper, HttpMapping.statusFor(saved.outcome()), saved)));
             return stored(mapper, HttpMapping.statusFor(transfer.outcome()), transfer);
         }));
 
