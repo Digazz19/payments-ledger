@@ -1,12 +1,14 @@
 package ledger.service;
 
 import java.util.UUID;
+import java.util.function.BiConsumer;
 import ledger.domain.Account;
 import ledger.domain.SystemAccount;
 import ledger.domain.Transfer;
 import ledger.domain.TransferStatus;
 import ledger.http.ApiException;
 import ledger.repository.TransferRepository;
+import org.jooq.DSLContext;
 
 public class DepositService {
 
@@ -18,7 +20,7 @@ public class DepositService {
         this.transfers = transfers;
     }
 
-    public Transfer deposit(DepositRequest request) {
+    public Transfer deposit(DepositRequest request, BiConsumer<DSLContext, Transfer> beforeCommit) {
         if (request.accountId() == null) {
             throw new ApiException(400, "VALIDATION_ERROR", "accountId is required");
         }
@@ -27,6 +29,7 @@ public class DepositService {
         }
 
         Account account = accounts.get(request.accountId());
+
         Transfer transfer = new Transfer(
             UUID.randomUUID(),
             SystemAccount.ID,
@@ -36,8 +39,8 @@ public class DepositService {
             TransferStatus.COMPLETED,
             null
         );
-        
-        transfers.save(transfer);
+
+        transfers.save(transfer, beforeCommit);
         return transfer;
     }
 }

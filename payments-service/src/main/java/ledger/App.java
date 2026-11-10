@@ -22,6 +22,9 @@ import ledger.service.DepositService;
 import ledger.service.TransferRequest;
 import ledger.service.TransferService;
 import ledger.service.StatementService;
+import ledger.idempotency.IdempotencyHandler;
+import ledger.idempotency.IdempotencyRepository;
+import ledger.idempotency.StoredResponse;
 import spark.Response;
 import spark.Service;
 
@@ -42,6 +45,8 @@ public final class App {
         DepositService deposits = new DepositService(accounts, transferRepository);
         TransferService transfers = new TransferService(accounts, transferRepository);
         StatementService statements = new StatementService(accounts, new LedgerEntryRepository(database.dsl()));
+        IdempotencyRepository idempotencyRepository = new IdempotencyRepository(database.dsl());
+        IdempotencyHandler idempotency = new IdempotencyHandler(idempotencyRepository, mapper);
         Service service = Service.ignite().port(port);
 
         service.before((request, response) -> response.type("application/json"));
@@ -65,18 +70,19 @@ public final class App {
                 statements.entries(id, request.queryParams("limit"), request.queryParams("cursor")));
         });
 
-        service.post("/deposits", (request, response) -> {
+        service.post("/deposits", (request, response) -> idempotency.handle(request, response, key -> {
             DepositRequest body = mapper.readValue(request.body(), DepositRequest.class);
-            response.status(201);
-            return mapper.writeValueAsString(deposits.deposit(body));
-        });
+            Transfer transfer = deposits.deposit(body, (tx, saved) ->
+                idempotencyRepository.complete(tx, key, stored(mapper, 201, saved)));
+            return stored(mapper, 201, transfer);
+        }));
 
-        service.post("/transfers", (request, response) -> {
+        service.post("/transfers", (request, response) -> idempotency.handle(request, response, key -> {
             TransferRequest body = mapper.readValue(request.body(), TransferRequest.class);
-            Transfer transfer = transfers.transfer(body);
-            response.status(HttpMapping.statusFor(transfer.outcome()));
-            return mapper.writeValueAsString(transfer);
-        });
+            Transfer transfer = transfers.transfer(body, (tx, saved) ->
+                idempotencyRepository.complete(tx, key, stored(mapper, HttpMapping.statusFor(saved.outcome()), saved)));
+            return stored(mapper, HttpMapping.statusFor(transfer.outcome()), transfer);
+        }));
 
         service.get("/transfers/:id", (request, response) -> {
             UUID id = UUID.fromString(request.params("id"));
@@ -101,6 +107,14 @@ public final class App {
         service.init();
         service.awaitInitialization();
         return new App(service);
+    }
+
+    private static StoredResponse stored(ObjectMapper mapper, int status, Object body) {
+        try {
+            return new StoredResponse(status, mapper.writeValueAsString(body));
+        } catch (JsonProcessingException error) {
+            throw new IllegalStateException(error);
+        }
     }
 
     private static void writeError(ObjectMapper mapper, Response response, int status, String code, String message) {

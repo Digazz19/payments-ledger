@@ -1,6 +1,10 @@
 package ledger.service;
 
 import java.util.UUID;
+import java.util.function.BiConsumer;
+
+import org.jooq.DSLContext;
+
 import ledger.domain.Account;
 import ledger.domain.Transfer;
 import ledger.domain.TransferStatus;
@@ -17,7 +21,7 @@ public class TransferService {
         this.repository = repository;
     }
 
-    public Transfer transfer(TransferRequest request) {
+    public Transfer transfer(TransferRequest request, BiConsumer<DSLContext, Transfer> beforeCommit) {
         validate(request);
 
         accounts.get(request.sourceAccountId());
@@ -28,7 +32,8 @@ public class TransferService {
             request.sourceAccountId(),
             request.targetAccountId(),
             request.amountMinor(),
-            request.currency()
+            request.currency(),
+            beforeCommit
         );
     }
 

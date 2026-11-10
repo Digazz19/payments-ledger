@@ -7,6 +7,7 @@ import static ledger.jooq.Tables.TRANSFERS;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 import ledger.domain.Transfer;
 import ledger.domain.TransferStatus;
 import org.jooq.DSLContext;
@@ -20,7 +21,13 @@ public class TransferRepository {
         this.dsl = dsl;
     }
 
-    public Transfer transfer(UUID id, UUID source, UUID target, long amountMinor, String currency) {
+    public Transfer transfer(
+            UUID id,
+            UUID source,
+            UUID target,
+            long amountMinor,
+            String currency,
+            BiConsumer<DSLContext, Transfer> beforeCommit) {
         return dsl.transactionResult(configuration -> {
             DSLContext tx = DSL.using(configuration);
 
@@ -48,17 +55,19 @@ public class TransferRepository {
             if (hasFunds) {
                 moveMoney(tx, transfer);
             }
+            beforeCommit.accept(tx, transfer);
             return transfer;
         });
     }
 
-    public void save(Transfer transfer) {
+    public void save(Transfer transfer, BiConsumer<DSLContext, Transfer> beforeCommit) {
         dsl.transaction(configuration -> {
             DSLContext tx = DSL.using(configuration);
             insertTransfer(tx, transfer);
             if (transfer.status() == TransferStatus.COMPLETED) {
                 moveMoney(tx, transfer);
             }
+            beforeCommit.accept(tx, transfer);
         });
     }
 
