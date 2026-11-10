@@ -4,6 +4,9 @@ import ledger.App
 import ledger.db.Database
 import ledger.db.PostgresSpec
 import spock.lang.Shared
+import java.util.concurrent.Callable
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 
 abstract class ApiSpec extends PostgresSpec {
     @Shared
@@ -59,5 +62,22 @@ abstract class ApiSpec extends PostgresSpec {
 
     void restoreLedgerWrites() {
         sql.execute('DROP TRIGGER IF EXISTS fail_ledger_write ON ledger_entries')
+    }
+
+    List<TestClient.Response> concurrently(int n, Closure<TestClient.Response> action) {
+        def pool = Executors.newVirtualThreadPerTaskExecutor()
+        def start = new CountDownLatch(1)
+        try {
+            def futures = (0..<n).collect { i ->
+                pool.submit({
+                    start.await()
+                    action(i)
+                } as Callable)
+            }
+            start.countDown()
+            futures*.get()
+        } finally {
+            pool.shutdown()
+        }
     }
 }
