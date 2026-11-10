@@ -6,10 +6,12 @@ package ledger.jooq;
 
 import ledger.jooq.tables.AccountBalances;
 import ledger.jooq.tables.Accounts;
+import ledger.jooq.tables.IdempotencyKeys;
 import ledger.jooq.tables.LedgerEntries;
 import ledger.jooq.tables.Transfers;
 import ledger.jooq.tables.records.AccountBalancesRecord;
 import ledger.jooq.tables.records.AccountsRecord;
+import ledger.jooq.tables.records.IdempotencyKeysRecord;
 import ledger.jooq.tables.records.LedgerEntriesRecord;
 import ledger.jooq.tables.records.TransfersRecord;
 
@@ -34,6 +36,7 @@ public class Keys {
 
     public static final UniqueKey<AccountBalancesRecord> ACCOUNT_BALANCES_PKEY = Internal.createUniqueKey(AccountBalances.ACCOUNT_BALANCES, DSL.name("account_balances_pkey"), new TableField[] { AccountBalances.ACCOUNT_BALANCES.ACCOUNT_ID }, true);
     public static final UniqueKey<AccountsRecord> ACCOUNTS_PKEY = Internal.createUniqueKey(Accounts.ACCOUNTS, DSL.name("accounts_pkey"), new TableField[] { Accounts.ACCOUNTS.ID }, true);
+    public static final UniqueKey<IdempotencyKeysRecord> IDEMPOTENCY_KEYS_PKEY = Internal.createUniqueKey(IdempotencyKeys.IDEMPOTENCY_KEYS, DSL.name("idempotency_keys_pkey"), new TableField[] { IdempotencyKeys.IDEMPOTENCY_KEYS.IDEMPOTENCY_KEY }, true);
     public static final UniqueKey<LedgerEntriesRecord> LEDGER_ENTRIES_PKEY = Internal.createUniqueKey(LedgerEntries.LEDGER_ENTRIES, DSL.name("ledger_entries_pkey"), new TableField[] { LedgerEntries.LEDGER_ENTRIES.ID }, true);
     public static final UniqueKey<LedgerEntriesRecord> LEDGER_ENTRIES_TRANSFER_ID_DIRECTION_KEY = Internal.createUniqueKey(LedgerEntries.LEDGER_ENTRIES, DSL.name("ledger_entries_transfer_id_direction_key"), new TableField[] { LedgerEntries.LEDGER_ENTRIES.TRANSFER_ID, LedgerEntries.LEDGER_ENTRIES.DIRECTION }, true);
     public static final UniqueKey<TransfersRecord> TRANSFERS_PKEY = Internal.createUniqueKey(Transfers.TRANSFERS, DSL.name("transfers_pkey"), new TableField[] { Transfers.TRANSFERS.ID }, true);

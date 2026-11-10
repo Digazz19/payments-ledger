@@ -6,6 +6,7 @@ package ledger.jooq;
 
 import ledger.jooq.tables.AccountBalances;
 import ledger.jooq.tables.Accounts;
+import ledger.jooq.tables.IdempotencyKeys;
 import ledger.jooq.tables.LedgerEntries;
 import ledger.jooq.tables.Transfers;
 
@@ -25,6 +26,11 @@ public class Tables {
      * The table <code>public.accounts</code>.
      */
     public static final Accounts ACCOUNTS = Accounts.ACCOUNTS;
+
+    /**
+     * The table <code>public.idempotency_keys</code>.
+     */
+    public static final IdempotencyKeys IDEMPOTENCY_KEYS = IdempotencyKeys.IDEMPOTENCY_KEYS;
 
     /**
      * The table <code>public.ledger_entries</code>.

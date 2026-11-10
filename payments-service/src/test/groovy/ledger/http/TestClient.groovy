@@ -24,12 +24,21 @@ class TestClient {
         send(HttpRequest.newBuilder(URI.create(baseUrl + path)).GET().build())
     }
 
-    Response post(String path, Map body) {
-        def request = HttpRequest.newBuilder(URI.create(baseUrl + path))
+    Response post(String path, Map body, Map<String, String> headers = [:]) {
+        def allHeaders = ["Idempotency-Key": UUID.randomUUID().toString()] + headers
+        sendPost(path, body, allHeaders)
+    }
+
+    Response postWithoutKey(String path, Map body) {
+        sendPost(path, body, [:])
+    }
+
+    private Response sendPost(String path, Map body, Map<String, String> headers) {
+        def builder = HttpRequest.newBuilder(URI.create(baseUrl + path))
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(JsonOutput.toJson(body)))
-            .build()
-        send(request)
+        headers.each { name, value -> builder.header(name, value) }
+        send(builder.build())
     }
 
     private Response send(HttpRequest request) {

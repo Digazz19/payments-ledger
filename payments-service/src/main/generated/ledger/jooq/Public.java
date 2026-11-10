@@ -9,6 +9,7 @@ import java.util.List;
 
 import ledger.jooq.tables.AccountBalances;
 import ledger.jooq.tables.Accounts;
+import ledger.jooq.tables.IdempotencyKeys;
 import ledger.jooq.tables.LedgerEntries;
 import ledger.jooq.tables.Transfers;
 
@@ -42,6 +43,11 @@ public class Public extends SchemaImpl {
     public final Accounts ACCOUNTS = Accounts.ACCOUNTS;
 
     /**
+     * The table <code>public.idempotency_keys</code>.
+     */
+    public final IdempotencyKeys IDEMPOTENCY_KEYS = IdempotencyKeys.IDEMPOTENCY_KEYS;
+
+    /**
      * The table <code>public.ledger_entries</code>.
      */
     public final LedgerEntries LEDGER_ENTRIES = LedgerEntries.LEDGER_ENTRIES;
@@ -69,6 +75,7 @@ public class Public extends SchemaImpl {
         return Arrays.asList(
             AccountBalances.ACCOUNT_BALANCES,
             Accounts.ACCOUNTS,
+            IdempotencyKeys.IDEMPOTENCY_KEYS,
             LedgerEntries.LEDGER_ENTRIES,
             Transfers.TRANSFERS
         );
