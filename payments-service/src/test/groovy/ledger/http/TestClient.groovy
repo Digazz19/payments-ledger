@@ -6,6 +6,8 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 
 class TestClient {
     static class Response {
@@ -45,5 +47,13 @@ class TestClient {
         def response = http.send(request, HttpResponse.BodyHandlers.ofString())
         def json = response.body() ? new JsonSlurper().parseText(response.body()) : null
         new Response(status: response.statusCode(), json: json)
+    }
+
+    String hashOf(String path, Map body) {
+        def value = "POST " + path + "\n" + JsonOutput.toJson(body)
+        MessageDigest.getInstance("SHA-256")
+            .digest(value.getBytes(StandardCharsets.UTF_8))
+            .encodeHex()
+            .toString()
     }
 }

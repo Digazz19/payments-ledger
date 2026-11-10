@@ -5,6 +5,7 @@ package ledger.jooq.tables.records;
 
 
 import java.time.OffsetDateTime;
+import java.util.UUID;
 
 import ledger.jooq.tables.IdempotencyKeys;
 
@@ -118,6 +119,20 @@ public class IdempotencyKeysRecord extends UpdatableRecordImpl<IdempotencyKeysRe
         return (OffsetDateTime) get(6);
     }
 
+    /**
+     * Setter for <code>public.idempotency_keys.lock_token</code>.
+     */
+    public void setLockToken(UUID value) {
+        set(7, value);
+    }
+
+    /**
+     * Getter for <code>public.idempotency_keys.lock_token</code>.
+     */
+    public UUID getLockToken() {
+        return (UUID) get(7);
+    }
+
     // -------------------------------------------------------------------------
     // Primary key information
     // -------------------------------------------------------------------------
@@ -141,7 +156,7 @@ public class IdempotencyKeysRecord extends UpdatableRecordImpl<IdempotencyKeysRe
     /**
      * Create a detached, initialised IdempotencyKeysRecord
      */
-    public IdempotencyKeysRecord(String idempotencyKey, String requestHash, String state, Integer responseStatus, String responseBody, OffsetDateTime lockedAt, OffsetDateTime createdAt) {
+    public IdempotencyKeysRecord(String idempotencyKey, String requestHash, String state, Integer responseStatus, String responseBody, OffsetDateTime lockedAt, OffsetDateTime createdAt, UUID lockToken) {
         super(IdempotencyKeys.IDEMPOTENCY_KEYS);
 
         setIdempotencyKey(idempotencyKey);
@@ -151,6 +166,7 @@ public class IdempotencyKeysRecord extends UpdatableRecordImpl<IdempotencyKeysRe
         setResponseBody(responseBody);
         setLockedAt(lockedAt);
         setCreatedAt(createdAt);
+        setLockToken(lockToken);
         resetTouchedOnNotNull();
     }
 }
