@@ -1,0 +1,1 @@
+ALTER TABLE account_balances ADD COLUMN version BIGINT NOT NULL DEFAULT 0;

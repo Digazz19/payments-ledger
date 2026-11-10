@@ -4,15 +4,26 @@ import static ledger.jooq.Tables.ACCOUNT_BALANCES;
 import static ledger.jooq.Tables.LEDGER_ENTRIES;
 import static ledger.jooq.Tables.TRANSFERS;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import ledger.domain.Transfer;
 import ledger.domain.TransferStatus;
+import ledger.http.ApiException;
 import org.jooq.DSLContext;
+import org.jooq.Field;
+import org.jooq.Record3;
 import org.jooq.impl.DSL;
 
 public class TransferRepository {
+
+    private static final Field<Long> VERSION = DSL.field(DSL.name("version"), Long.class);
+    private static final int MAX_ATTEMPTS = 30;
+
+    private static class OptimisticConflict extends RuntimeException {
+    }
 
     private final DSLContext dsl;
 
@@ -21,35 +32,14 @@ public class TransferRepository {
     }
 
     public Transfer transfer(UUID id, UUID source, UUID target, long amountMinor, String currency) {
-        return dsl.transactionResult(configuration -> {
-            DSLContext tx = DSL.using(configuration);
-
-            Map<UUID, Long> balances = tx
-                .select(ACCOUNT_BALANCES.ACCOUNT_ID, ACCOUNT_BALANCES.BALANCE_MINOR)
-                .from(ACCOUNT_BALANCES)
-                .where(ACCOUNT_BALANCES.ACCOUNT_ID.in(source, target))
-                .orderBy(ACCOUNT_BALANCES.ACCOUNT_ID)
-                .forUpdate()
-                .fetchMap(ACCOUNT_BALANCES.ACCOUNT_ID, ACCOUNT_BALANCES.BALANCE_MINOR);
-
-            boolean hasFunds = balances.get(source) >= amountMinor;
-
-            Transfer transfer = new Transfer(
-                id,
-                source,
-                target,
-                amountMinor,
-                currency,
-                hasFunds ? TransferStatus.COMPLETED : TransferStatus.REJECTED,
-                hasFunds ? null : "INSUFFICIENT_FUNDS"
-            );
-
-            insertTransfer(tx, transfer);
-            if (hasFunds) {
-                moveMoney(tx, transfer);
+        for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            try {
+                return tryTransfer(id, source, target, amountMinor, currency);
+            } catch (OptimisticConflict conflict) {
+                sleepBeforeRetry(attempt);
             }
-            return transfer;
-        });
+        }
+        throw new ApiException(409, "CONCURRENT_UPDATE", "Too many concurrent updates, try again");
     }
 
     public void save(Transfer transfer) {
@@ -75,6 +65,64 @@ public class TransferRepository {
                 row.getReason()));
     }
 
+    private Transfer tryTransfer(UUID id, UUID source, UUID target, long amountMinor, String currency) {
+        return dsl.transactionResult(configuration -> {
+            DSLContext tx = DSL.using(configuration);
+
+            Map<UUID, Record3<UUID, Long, Long>> rows = tx
+                .select(ACCOUNT_BALANCES.ACCOUNT_ID, ACCOUNT_BALANCES.BALANCE_MINOR, VERSION)
+                .from(ACCOUNT_BALANCES)
+                .where(ACCOUNT_BALANCES.ACCOUNT_ID.in(source, target))
+                .fetchMap(ACCOUNT_BALANCES.ACCOUNT_ID);
+
+            boolean hasFunds = rows.get(source).value2() >= amountMinor;
+
+            Transfer transfer = new Transfer(
+                id,
+                source,
+                target,
+                amountMinor,
+                currency,
+                hasFunds ? TransferStatus.COMPLETED : TransferStatus.REJECTED,
+                hasFunds ? null : "INSUFFICIENT_FUNDS"
+            );
+
+            if (hasFunds) {
+                List<UUID> ordered = source.compareTo(target) < 0
+                    ? List.of(source, target)
+                    : List.of(target, source);
+
+                for (UUID accountId : ordered) {
+                    long delta = accountId.equals(source) ? -amountMinor : amountMinor;
+                    int updated = tx.update(ACCOUNT_BALANCES)
+                        .set(ACCOUNT_BALANCES.BALANCE_MINOR, ACCOUNT_BALANCES.BALANCE_MINOR.plus(delta))
+                        .set(VERSION, VERSION.plus(1))
+                        .where(ACCOUNT_BALANCES.ACCOUNT_ID.eq(accountId))
+                        .and(VERSION.eq(rows.get(accountId).value3()))
+                        .execute();
+                    if (updated == 0) {
+                        throw new OptimisticConflict();
+                    }
+                }
+            }
+
+            insertTransfer(tx, transfer);
+            if (hasFunds) {
+                insertEntries(tx, transfer);
+            }
+            return transfer;
+        });
+    }
+
+    private void sleepBeforeRetry(int attempt) {
+        try {
+            Thread.sleep(ThreadLocalRandom.current().nextLong(1, 5L * attempt + 1));
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(interrupted);
+        }
+    }
+
     private void insertTransfer(DSLContext tx, Transfer transfer) {
         tx.insertInto(TRANSFERS)
             .set(TRANSFERS.ID, transfer.id())
@@ -87,7 +135,7 @@ public class TransferRepository {
             .execute();
     }
 
-    private void moveMoney(DSLContext tx, Transfer transfer) {
+    private void insertEntries(DSLContext tx, Transfer transfer) {
         tx.insertInto(
                 LEDGER_ENTRIES,
                 LEDGER_ENTRIES.TRANSFER_ID,
@@ -97,6 +145,10 @@ public class TransferRepository {
             .values(transfer.id(), transfer.sourceAccountId(), "DEBIT", transfer.amountMinor())
             .values(transfer.id(), transfer.targetAccountId(), "CREDIT", transfer.amountMinor())
             .execute();
+    }
+
+    private void moveMoney(DSLContext tx, Transfer transfer) {
+        insertEntries(tx, transfer);
 
         tx.update(ACCOUNT_BALANCES)
             .set(ACCOUNT_BALANCES.BALANCE_MINOR, ACCOUNT_BALANCES.BALANCE_MINOR.minus(transfer.amountMinor()))
