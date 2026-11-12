@@ -1,5 +1,8 @@
 package ledger.service;
 
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 import ledger.domain.Account;
 import ledger.http.ApiException;
@@ -21,7 +24,8 @@ public class AccountService {
             request.ownerName(),
             request.currency(),
             request.country(),
-            0
+            0,
+            OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS)
         );
 
         repository.insert(account);

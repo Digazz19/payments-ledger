@@ -6,11 +6,13 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 import ledger.db.Database;
 import ledger.domain.Transfer;
+import ledger.fraud.FraudClient;
 import ledger.http.ApiException;
 import ledger.http.HttpMapping;
 import ledger.repository.AccountRepository;
@@ -37,14 +39,14 @@ public final class App {
         this.service = service;
     }
 
-    public static App start(Database database, int port) {
+    public static App start(Database database, FraudClient fraud, int port) {
         ObjectMapper mapper = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         TransferRepository transferRepository = new TransferRepository(database.dsl());
         AccountService accounts = new AccountService(new AccountRepository(database.dsl()));
         DepositService deposits = new DepositService(accounts, transferRepository);
-        TransferService transfers = new TransferService(accounts, transferRepository);
+        TransferService transfers = new TransferService(accounts, transferRepository, fraud, Clock.systemUTC());
         StatementService statements = new StatementService(accounts, new LedgerEntryRepository(database.dsl()));
         IdempotencyRepository idempotencyRepository = new IdempotencyRepository(database.dsl());
         IdempotencyHandler idempotency = new IdempotencyHandler(

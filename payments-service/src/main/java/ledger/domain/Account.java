@@ -1,6 +1,14 @@
 package ledger.domain;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
-public record Account(UUID id, String ownerName, String currency, String country, long balanceMinor) {
+public record Account(
+    UUID id,
+    String ownerName,
+    String currency,
+    String country,
+    long balanceMinor,
+    OffsetDateTime createdAt
+) {
 }
