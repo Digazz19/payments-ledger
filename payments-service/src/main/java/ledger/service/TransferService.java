@@ -57,6 +57,16 @@ public class TransferService {
         };
     }
 
+    public Transfer review(UUID id, ReviewRequest request) {
+        ReviewDecision decision;
+        try {
+            decision = ReviewDecision.valueOf(String.valueOf(request.decision()));
+        } catch (IllegalArgumentException invalid) {
+            throw validationError("decision must be APPROVE or REJECT");
+        }
+        return repository.review(id, decision == ReviewDecision.APPROVE);
+    }
+
     public Transfer get(UUID id) {
         return repository.findById(id)
             .orElseThrow(() -> new ApiException(404, "TRANSFER_NOT_FOUND", "Transfer not found"));
