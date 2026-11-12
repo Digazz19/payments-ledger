@@ -1,1 +1,14 @@
-// fraud-service module
+apply plugin: 'application'
+
+application {
+    mainClass = 'fraud.service.Main'
+}
+
+dependencies {
+    implementation project(':fraud-dsl')
+    implementation 'com.sparkjava:spark-core:2.9.4'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
+    runtimeOnly 'org.slf4j:slf4j-simple:2.0.16'
+
+    testImplementation 'org.apache.groovy:groovy-json:4.0.24'
+}

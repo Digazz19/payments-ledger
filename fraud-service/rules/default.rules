@@ -1,0 +1,9 @@
+# Valor elevado para outro país
+RULE high_value_foreign
+WHEN amount > 100000 AND source.country != target.country
+THEN REVIEW
+
+# Demasiadas transferências num minuto
+RULE rapid_fire
+WHEN velocity(1m) >= 5
+THEN BLOCK
