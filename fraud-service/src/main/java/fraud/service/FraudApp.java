@@ -58,6 +58,9 @@ public final class FraudApp {
         service.exception(JsonProcessingException.class, (error, request, response) ->
             writeError(mapper, response, 400, "Invalid JSON body"));
 
+        service.exception(VelocityUnavailableException.class, (error, request, response) ->
+            writeError(mapper, response, 503, "Velocity data is unavailable"));
+
         service.exception(Exception.class, (error, request, response) ->
             writeError(mapper, response, 500, "Unexpected error"));
 

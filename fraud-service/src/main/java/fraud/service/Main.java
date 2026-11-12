@@ -14,9 +14,18 @@ public final class Main {
         int port = Integer.parseInt(env("PORT", "8081"));
 
         String rules = Files.readString(Path.of(rulesPath));
-        FraudApp app = FraudApp.start(rules, new InMemoryVelocityStore(), Clock.systemUTC(), port);
+        String redisHost = env("REDIS_HOST", "localhost");
+        int redisPort = Integer.parseInt(env("REDIS_PORT", "6379"));
+        RedisVelocityStore velocity = new RedisVelocityStore(redisHost, redisPort);
 
-        Runtime.getRuntime().addShutdownHook(new Thread(app::stop));
+        FraudApp app;
+        try {
+            app = FraudApp.start(rules, velocity, Clock.systemUTC(), port);
+        } catch (RuntimeException error) {
+            velocity.close();
+            throw error;
+        }
+
         System.out.println("fraud-service running on port " + app.port() + " with rules from " + rulesPath);
     }
 
