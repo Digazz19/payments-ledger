@@ -10,6 +10,8 @@ import java.util.UUID;
 import java.util.function.BiConsumer;
 import ledger.domain.Transfer;
 import ledger.domain.TransferStatus;
+import ledger.http.ApiException;
+import ledger.jooq.tables.records.TransfersRecord;
 import org.jooq.DSLContext;
 import org.jooq.impl.DSL;
 
@@ -31,14 +33,7 @@ public class TransferRepository {
         return dsl.transactionResult(configuration -> {
             DSLContext tx = DSL.using(configuration);
 
-            Map<UUID, Long> balances = tx
-                .select(ACCOUNT_BALANCES.ACCOUNT_ID, ACCOUNT_BALANCES.BALANCE_MINOR)
-                .from(ACCOUNT_BALANCES)
-                .where(ACCOUNT_BALANCES.ACCOUNT_ID.in(source, target))
-                .orderBy(ACCOUNT_BALANCES.ACCOUNT_ID)
-                .forUpdate()
-                .fetchMap(ACCOUNT_BALANCES.ACCOUNT_ID, ACCOUNT_BALANCES.BALANCE_MINOR);
-
+            Map<UUID, Long> balances = lockBalances(tx, source, target);
             boolean hasFunds = balances.get(source) >= amountMinor;
 
             Transfer transfer = new Transfer(
@@ -71,17 +66,84 @@ public class TransferRepository {
         });
     }
 
+    public Transfer review(UUID id, boolean approve) {
+        return dsl.transactionResult(configuration -> {
+            DSLContext tx = DSL.using(configuration);
+
+            TransfersRecord row = tx.selectFrom(TRANSFERS)
+                .where(TRANSFERS.ID.eq(id))
+                .forUpdate()
+                .fetchOne();
+
+            if (row == null) {
+                throw new ApiException(404, "TRANSFER_NOT_FOUND", "Transfer not found");
+            }
+
+            Transfer current = toTransfer(row);
+            if (current.status() != TransferStatus.IN_REVIEW) {
+                throw new ApiException(409, "TRANSFER_NOT_IN_REVIEW", "Transfer was already decided");
+            }
+
+            Transfer decided;
+            if (!approve) {
+                decided = withStatus(current, TransferStatus.REJECTED, "REJECTED_BY_REVIEWER");
+            } else {
+                Map<UUID, Long> balances = lockBalances(tx, current.sourceAccountId(), current.targetAccountId());
+                boolean hasFunds = balances.get(current.sourceAccountId()) >= current.amountMinor();
+                decided = hasFunds
+                    ? withStatus(current, TransferStatus.COMPLETED, null)
+                    : withStatus(current, TransferStatus.REJECTED, "INSUFFICIENT_FUNDS");
+                if (hasFunds) {
+                    moveMoney(tx, decided);
+                }
+            }
+
+            tx.update(TRANSFERS)
+                .set(TRANSFERS.STATUS, decided.status().name())
+                .set(TRANSFERS.REASON, decided.reason())
+                .where(TRANSFERS.ID.eq(id))
+                .execute();
+
+            return decided;
+        });
+    }
+
     public Optional<Transfer> findById(UUID id) {
         return dsl.selectFrom(TRANSFERS)
             .where(TRANSFERS.ID.eq(id))
-            .fetchOptional(row -> new Transfer(
-                row.getId(),
-                row.getSourceAccountId(),
-                row.getTargetAccountId(),
-                row.getAmountMinor(),
-                row.getCurrency(),
-                TransferStatus.valueOf(row.getStatus()),
-                row.getReason()));
+            .fetchOptional(this::toTransfer);
+    }
+
+    private Map<UUID, Long> lockBalances(DSLContext tx, UUID source, UUID target) {
+        return tx
+            .select(ACCOUNT_BALANCES.ACCOUNT_ID, ACCOUNT_BALANCES.BALANCE_MINOR)
+            .from(ACCOUNT_BALANCES)
+            .where(ACCOUNT_BALANCES.ACCOUNT_ID.in(source, target))
+            .orderBy(ACCOUNT_BALANCES.ACCOUNT_ID)
+            .forUpdate()
+            .fetchMap(ACCOUNT_BALANCES.ACCOUNT_ID, ACCOUNT_BALANCES.BALANCE_MINOR);
+    }
+
+    private Transfer toTransfer(TransfersRecord row) {
+        return new Transfer(
+            row.getId(),
+            row.getSourceAccountId(),
+            row.getTargetAccountId(),
+            row.getAmountMinor(),
+            row.getCurrency(),
+            TransferStatus.valueOf(row.getStatus()),
+            row.getReason());
+    }
+
+    private Transfer withStatus(Transfer transfer, TransferStatus status, String reason) {
+        return new Transfer(
+            transfer.id(),
+            transfer.sourceAccountId(),
+            transfer.targetAccountId(),
+            transfer.amountMinor(),
+            transfer.currency(),
+            status,
+            reason);
     }
 
     private void insertTransfer(DSLContext tx, Transfer transfer) {

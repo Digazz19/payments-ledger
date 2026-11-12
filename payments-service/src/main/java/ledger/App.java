@@ -22,6 +22,7 @@ import ledger.service.AccountService;
 import ledger.service.CreateAccountRequest;
 import ledger.service.DepositRequest;
 import ledger.service.DepositService;
+import ledger.service.ReviewRequest;
 import ledger.service.TransferRequest;
 import ledger.service.TransferService;
 import ledger.service.StatementService;
@@ -91,6 +92,15 @@ public final class App {
         service.get("/transfers/:id", (request, response) -> {
             UUID id = UUID.fromString(request.params("id"));
             return mapper.writeValueAsString(transfers.get(id));
+        });
+
+        service.post("/transfers/:id/review", (request, response) -> {
+            UUID id = UUID.fromString(request.params("id"));
+            ReviewRequest body = mapper.readValue(request.body(), ReviewRequest.class);
+            Transfer transfer = transfers.review(id, body);
+            boolean failedForFunds = "INSUFFICIENT_FUNDS".equals(transfer.reason());
+            response.status(failedForFunds ? 422 : 200);
+            return mapper.writeValueAsString(transfer);
         });
 
         service.exception(ApiException.class, (error, request, response) ->
