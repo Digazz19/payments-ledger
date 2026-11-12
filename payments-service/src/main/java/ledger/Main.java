@@ -1,6 +1,10 @@
 package ledger;
 
+import java.time.Duration;
 import ledger.db.Database;
+import ledger.fraud.FraudClient;
+import ledger.fraud.HttpFraudClient;
+
 import org.flywaydb.core.Flyway;
 
 public final class Main {
@@ -20,7 +24,10 @@ public final class Main {
             .migrate();
 
         Database database = new Database(url, user, password);
-        App app = App.start(database, port);
+        String fraudUrl = env("FRAUD_URL", "http://localhost:8081");
+        FraudClient fraud = new HttpFraudClient(fraudUrl, Duration.ofMillis(300));
+
+        App app = App.start(database, fraud, port);
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             app.stop();

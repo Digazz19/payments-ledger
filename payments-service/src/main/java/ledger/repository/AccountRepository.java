@@ -27,6 +27,7 @@ public class AccountRepository {
                 .set(ACCOUNTS.CURRENCY, account.currency())
                 .set(ACCOUNTS.COUNTRY, account.country())
                 .set(ACCOUNTS.TYPE, "CUSTOMER")
+                .set(ACCOUNTS.CREATED_AT, account.createdAt())
                 .execute();
 
             tx.insertInto(ACCOUNT_BALANCES)
@@ -41,7 +42,8 @@ public class AccountRepository {
                 ACCOUNTS.OWNER_NAME,
                 ACCOUNTS.CURRENCY,
                 ACCOUNTS.COUNTRY,
-                ACCOUNT_BALANCES.BALANCE_MINOR)
+                ACCOUNT_BALANCES.BALANCE_MINOR,
+                ACCOUNTS.CREATED_AT)
             .from(ACCOUNTS)
             .join(ACCOUNT_BALANCES).on(ACCOUNT_BALANCES.ACCOUNT_ID.eq(ACCOUNTS.ID))
             .where(ACCOUNTS.ID.eq(id))
@@ -50,6 +52,7 @@ public class AccountRepository {
                 row.get(ACCOUNTS.OWNER_NAME),
                 row.get(ACCOUNTS.CURRENCY),
                 row.get(ACCOUNTS.COUNTRY),
-                row.get(ACCOUNT_BALANCES.BALANCE_MINOR)));
+                row.get(ACCOUNT_BALANCES.BALANCE_MINOR),
+                row.get(ACCOUNTS.CREATED_AT)));
     }
 }

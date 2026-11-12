@@ -1,16 +1,25 @@
 package ledger.http
 
-import ledger.App
-import ledger.db.Database
-import ledger.db.PostgresSpec
-import spock.lang.Shared
+import java.time.Duration
 import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import ledger.App
+import ledger.db.Database
+import ledger.db.PostgresSpec
+import ledger.fraud.HttpFraudClient
+import ledger.reconciliation.Reconciliation
+import spock.lang.Shared
 
 abstract class ApiSpec extends PostgresSpec {
     @Shared
     Database database
+
+    @Shared
+    Reconciliation reconciliation
+
+    @Shared
+    FraudStub fraudStub
 
     @Shared
     App app
@@ -20,17 +29,34 @@ abstract class ApiSpec extends PostgresSpec {
 
     def setupSpec() {
         database = new Database(postgres.jdbcUrl, postgres.username, postgres.password)
-        app = App.start(database, 0)
+        reconciliation = new Reconciliation(database.dsl())
+        fraudStub = new FraudStub()
+        app = App.start(database, new HttpFraudClient(fraudStub.url(), fraudTimeout()), 0)
         client = new TestClient(app.port())
     }
 
     def cleanupSpec() {
         app?.stop()
+        fraudStub?.stop()
         database?.close()
     }
 
+    def setup() {
+        fraudStub.reset()
+    }
+
+    def cleanup() {
+        assertLedgerConsistent()
+    }
+
+    void assertLedgerConsistent() {
+        assert reconciliation.check().isEmpty()
+        assert reconciliation.ledgerTotal() == 0
+    }
+
     String newAccount(Map args = [:]) {
-        def id = client.post("/accounts", [ownerName: "Teste", currency: "EUR", country: "PT"]).json.id
+        def country = args.country ?: "PT"
+        def id = client.post("/accounts", [ownerName: "Teste", currency: "EUR", country: country]).json.id
         if (args.balance) {
             client.post("/deposits", [accountId: id, amountMinor: args.balance])
         }
@@ -43,6 +69,10 @@ abstract class ApiSpec extends PostgresSpec {
 
     Map transfer(String source, String target, long amount) {
         [sourceAccountId: source, targetAccountId: target, amountMinor: amount, currency: "EUR"]
+    }
+
+    Duration fraudTimeout() {
+        Duration.ofSeconds(5)
     }
 
     void failLedgerWrites() {
