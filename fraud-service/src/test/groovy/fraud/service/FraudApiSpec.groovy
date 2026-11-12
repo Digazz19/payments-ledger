@@ -138,4 +138,26 @@ class FraudApiSpec extends Specification {
         def e = thrown(InvalidRulesException)
         e.message.contains("Expected")
     }
+
+    def "devolve 503 quando a contagem de velocidade falha"() {
+        given:
+        def failing = [
+            record: { String a, String t, java.time.Instant at -> throw new VelocityUnavailableException("down", null) },
+            count: { String a, java.time.Duration w, java.time.Instant n -> 0L }
+        ] as VelocityStore
+        def down = FraudApp.start(RULES, failing, Clock.systemUTC(), 0)
+
+        when:
+        def request = HttpRequest.newBuilder(URI.create("http://localhost:${down.port()}/evaluations"))
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(JsonOutput.toJson(evaluation())))
+            .build()
+        def response = http.send(request, HttpResponse.BodyHandlers.ofString())
+
+        then:
+        response.statusCode() == 503
+
+        cleanup:
+        down?.stop()
+    }
 }
